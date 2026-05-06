@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据看板 - 校园流浪猫</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<header class="navbar">
+  <div class="navbar-left">
+    <div class="logo"><div class="logo-icon">🐱</div>河海校园猫咪地图</div>
+    <nav class="nav-links">
+      <a href="../index.html">🗺️ 地图</a>
+      <a href="cats.html">🐾 猫咪档案</a>
+      <a href="checkin.html">📸 打卡上报</a>
+      <a href="stats.html" class="active">📊 数据看板</a>
+    </nav>
+  </div>
+  <div class="navbar-right" id="navUser"></div>
+</header>
+
+<div class="page-container">
+  <div class="page-header"><h1>📊 校园猫咪数据看板</h1></div>
+  <div class="stats-grid" id="statsGrid"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card"><div class="card-header"><h3>🐱 性别分布</h3></div><canvas id="genderChart" height="200"></canvas></div>
+    <div class="card"><div class="card-header"><h3>🏥 健康状态</h3></div><canvas id="healthChart" height="200"></canvas></div>
+  </div>
+  <div class="card" style="margin-top:16px"><div class="card-header"><h3>📈 近7天打卡趋势</h3></div><canvas id="trendChart" height="100"></canvas></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+    <div class="card"><div class="card-header"><h3>🏆 明星猫咪榜</h3></div><div class="rank-list" id="catRank"></div></div>
+    <div class="card"><div class="card-header"><h3>🌟 活跃用户榜</h3></div><div class="rank-list" id="userRank"></div></div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  Auth.updateNav();
+  if(!DB.Session.isLoggedIn()) window.location.replace('login.html');
+
+  const catStats     = DB.Cat.getStats();
+  const checkinStats = DB.Checkin.getStats();
+  const metrics = [
+    {icon:'🐱',label:'猫咪总数',value:catStats.total},
+    {icon:'✅',label:'已绝育',value:catStats.neutered},
+    {icon:'🏥',label:'需关注',value:catStats.injured},
+    {icon:'📸',label:'打卡总数',value:checkinStats.total},
+    {icon:'⏳',label:'待审核',value:checkinStats.pending},
+    {icon:'🍱',label:'投喂次数',value:checkinStats.feed},
+  ];
+  document.getElementById('statsGrid').innerHTML = metrics.map(m=>`
+    <div class="stat-card">
+      <div class="stat-icon">${m.icon}</div>
+      <div class="stat-value">${m.value}</div>
+      <div class="stat-label">${m.label}</div>
+    </div>`).join('');
+
+  Chart.defaults.font.family = "'Nunito','PingFang SC',sans-serif";
+  const palette = ['#c97b3a','#e8956d','#7ab87a','#7aaed4','#e8c96d','#b07ad4'];
+
+  new Chart(document.getElementById('genderChart'),{
+    type:'doughnut',
+    data:{ labels:['公猫','母猫','未知'], datasets:[{data:[catStats.male,catStats.female,catStats.total-catStats.male-catStats.female], backgroundColor:['#7aaed4','#e8956d','#d4c4b4'], borderWidth:0, hoverOffset:8 }]},
+    options:{ plugins:{ legend:{ position:'bottom', labels:{padding:16,font:{size:12}} } }, cutout:'60%' }
+  });
+  new Chart(document.getElementById('healthChart'),{
+    type:'doughnut',
+    data:{ labels:['健康','需关注'], datasets:[{data:[catStats.healthy,catStats.injured], backgroundColor:['#7ab87a','#e07070'], borderWidth:0, hoverOffset:8 }]},
+    options:{ plugins:{ legend:{ position:'bottom', labels:{padding:16,font:{size:12}} } }, cutout:'60%' }
+  });
+
+  const days7 = Array.from({length:7},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-(6-i)); return d.toISOString().substring(0,10); });
+  const allCk = DB.Checkin.getAll();
+  new Chart(document.getElementById('trendChart'),{
+    type:'line',
+    data:{
+      labels: days7.map(d=>d.substring(5)),
+      datasets:[
+        { label:'偶遇打卡', data:days7.map(d=>allCk.filter(c=>c.created_at?.startsWith(d)&&c.type==='encounter').length), borderColor:'#c97b3a', backgroundColor:'rgba(201,123,58,.12)', fill:true, tension:.4, pointBackgroundColor:'#c97b3a', pointRadius:5 },
+        { label:'投喂打卡', data:days7.map(d=>allCk.filter(c=>c.created_at?.startsWith(d)&&c.type==='feed').length), borderColor:'#7ab87a', backgroundColor:'rgba(122,184,122,.12)', fill:true, tension:.4, pointBackgroundColor:'#7ab87a', pointRadius:5 }
+      ]
+    },
+    options:{ plugins:{legend:{position:'top'}}, scales:{ y:{beginAtZero:true,ticks:{stepSize:1,font:{size:11}}}, x:{ticks:{font:{size:11}}} } }
+  });
+
+  const cls=['gold','silver','bronze','',''];
+  const rankCats=DB.Cat.getAll().sort((a,b)=>(b.checkin_count||0)-(a.checkin_count||0)).slice(0,5);
+  document.getElementById('catRank').innerHTML=rankCats.map((cat,i)=>`
+    <div class="rank-item" onclick="window.location.href='cat_detail.html?id=${cat.id}'">
+      <div class="rank-num ${cls[i]}">${i+1}</div>
+      <span class="rank-name">${cat.gender==='female'?'😸':'😺'} ${cat.name}</span>
+      <span class="rank-val">${cat.checkin_count||0} 次</span>
+    </div>`).join('')||'<div class="empty-tip">暂无数据</div>';
+
+  const rankUsers=DB.User.getAll().filter(u=>u.role!=='admin').sort((a,b)=>(b.checkin_count||0)-(a.checkin_count||0)).slice(0,5);
+  document.getElementById('userRank').innerHTML=rankUsers.map((u,i)=>`
+    <div class="rank-item">
+      <div class="rank-num ${cls[i]}">${i+1}</div>
+      <span class="rank-name">👤 ${u.nickname}</span>
+      <span class="rank-val">${u.checkin_count||0} 次</span>
+    </div>`).join('')||'<div class="empty-tip">暂无数据</div>';
+</script>
+</body>
+</html>

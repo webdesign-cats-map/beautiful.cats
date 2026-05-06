@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>猫咪档案 - 校园流浪猫</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<header class="navbar">
+  <div class="navbar-left">
+    <div class="logo"><div class="logo-icon">🐱</div>河海校园猫咪地图</div>
+    <nav class="nav-links">
+      <a href="../index.html">🗺️ 地图</a>
+      <a href="cats.html" class="active">🐾 猫咪档案</a>
+      <a href="checkin.html">📸 打卡上报</a>
+      <a href="stats.html">📊 数据看板</a>
+    </nav>
+  </div>
+  <div class="navbar-right" id="navUser"></div>
+</header>
+
+<div class="page-container">
+  <div class="page-header">
+    <h1>🐾 猫咪档案库</h1>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="searchInput" class="form-input" placeholder="🔍 搜索猫咪..." style="width:160px">
+      <select id="filterGender" class="form-select" style="width:100px">
+        <option value="">全部性别</option>
+        <option value="male">♂ 公猫</option>
+        <option value="female">♀ 母猫</option>
+      </select>
+      <select id="filterHealth" class="form-select" style="width:100px">
+        <option value="">全部状态</option>
+        <option value="healthy">✅ 健康</option>
+        <option value="injured">🏥 需关注</option>
+      </select>
+      <button class="btn btn-primary btn-sm" id="btnAddCat" style="display:none">+ 添加猫咪</button>
+    </div>
+  </div>
+
+  <!-- 排行榜 -->
+  <div class="card mb-16">
+    <div class="card-header"><h3>⭐ 明星猫咪排行榜</h3></div>
+    <div class="rank-list" id="rankList"></div>
+  </div>
+
+  <!-- 猫咪卡片 -->
+  <div class="cat-grid" id="catGrid">
+    <div class="empty-tip" style="grid-column:1/-1">加载中...</div>
+  </div>
+</div>
+
+<!-- 添加猫咪弹窗（管理员） -->
+<div class="modal-overlay" id="addCatModal" style="display:none">
+  <div class="modal" style="max-width:540px">
+    <button class="modal-close" onclick="document.getElementById('addCatModal').style.display='none'">✕</button>
+    <div class="modal-title">🐱 添加新猫咪</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group"><label>名字 *</label><input type="text" id="ac-name" class="form-input" placeholder="猫咪名字"></div>
+      <div class="form-group"><label>性别</label>
+        <select id="ac-gender" class="form-select"><option value="unknown">未知</option><option value="male">♂ 公</option><option value="female">♀ 母</option></select>
+      </div>
+      <div class="form-group"><label>毛色</label><input type="text" id="ac-color" class="form-input" placeholder="如：橙色虎斑"></div>
+      <div class="form-group"><label>健康状态</label>
+        <select id="ac-health" class="form-select"><option value="healthy">✅ 健康</option><option value="injured">🏥 需关注</option></select>
+      </div>
+      <div class="form-group"><label>绝育状态</label>
+        <select id="ac-neutered" class="form-select"><option value="false">❌ 未绝育</option><option value="true">✅ 已绝育</option></select>
+      </div>
+      <div class="form-group"><label>个性标签（逗号分隔）</label><input type="text" id="ac-tags" class="form-input" placeholder="亲人,爱吃,傲娇"></div>
+    </div>
+    <div class="form-group"><label>📍 位置描述</label><input type="text" id="ac-addr" class="form-input" placeholder="如：图书馆门口"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="form-group"><label>经度</label><input type="number" id="ac-lng" class="form-input" placeholder="118.7567" step="0.00001"></div>
+      <div class="form-group"><label>纬度</label><input type="number" id="ac-lat" class="form-input" placeholder="31.9097" step="0.00001"></div>
+    </div>
+    <div class="form-group">
+      <label>🖼️ 头像照片（可选）</label>
+      <input type="file" id="ac-photo" accept="image/*" class="form-input" style="padding:6px">
+      <div id="ac-photo-preview" style="margin-top:8px;display:none">
+        <img id="ac-photo-img" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid var(--primary-lt)">
+      </div>
+    </div>
+    <div class="form-group"><label>简介</label><textarea id="ac-desc" class="form-input" rows="3" placeholder="描述这只猫的故事..."></textarea></div>
+    <div id="ac-err" class="err-msg" style="display:none">⚠️ <span id="ac-err-text"></span></div>
+    <div class="form-actions">
+      <button class="btn btn-primary" id="btnSaveNewCat">🐾 保存</button>
+      <button class="btn btn-outline" onclick="document.getElementById('addCatModal').style.display='none'">取消</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  Auth.updateNav();
+  if (!DB.Session.isLoggedIn()) window.location.replace('login.html');
+  if (DB.Session.isAdmin()) document.getElementById('btnAddCat').style.display='inline-flex';
+
+  function renderCats(cats) {
+    const grid = document.getElementById('catGrid');
+    if (!cats.length) { grid.innerHTML='<div class="empty-tip" style="grid-column:1/-1">还没有猫咪档案，快去上报吧！</div>'; return; }
+    const emojis = {'male':'😺','female':'😸','unknown':'🐱'};
+    grid.innerHTML = cats.map(cat => {
+      const avatarUrl = catAvatarUrl(cat.avatar);
+      const avatarContent = avatarUrl
+        ? `<img src="${avatarUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="width:100%;height:100%;object-fit:cover;border-radius:0"><div style="display:none;align-items:center;justify-content:center;font-size:52px;height:100%">${emojis[cat.gender]||'🐱'}</div>`
+        : `<div style="font-size:52px">${emojis[cat.gender]||'🐱'}</div>`;
+      return `
+      <div class="cat-card" onclick="window.location.href='cat_detail.html?id=${cat.id}'">
+        <div class="cat-card-avatar">${avatarContent}</div>
+        <div class="cat-card-body">
+          <div class="cat-card-name">${cat.name}</div>
+          <div class="cat-card-sub">${cat.gender==='male'?'♂ 公':cat.gender==='female'?'♀ 母':'性别未知'} · ${cat.color||'未知毛色'}</div>
+          <div class="cat-card-sub">📍 ${cat.location?.address||'位置未知'}</div>
+          <div class="cat-card-sub">打卡 <strong style="color:var(--primary)">${cat.checkin_count||0}</strong> 次</div>
+          <div class="cat-card-tags">
+            <span class="tag ${cat.health_status==='healthy'?'tag-green':'tag-red'}">${cat.health_status==='healthy'?'✅ 健康':'🏥 需关注'}</span>
+            ${cat.neutered?'<span class="tag tag-blue">已绝育</span>':''}
+            ${(cat.personality_tags||[]).slice(0,2).map(t=>`<span class="tag">${t}</span>`).join('')}
+          </div>
+        </div>
+      </div>`}).join('');
+  }
+
+  function renderRank() {
+    const cats = DB.Cat.getAll().sort((a,b)=>(b.checkin_count||0)-(a.checkin_count||0)).slice(0,5);
+    const cls  = ['gold','silver','bronze','',''];
+    document.getElementById('rankList').innerHTML = cats.map((cat,i)=>`
+      <div class="rank-item" onclick="window.location.href='cat_detail.html?id=${cat.id}'">
+        <div class="rank-num ${cls[i]}">${i+1}</div>
+        <span class="rank-name">${cat.gender==='female'?'😸':'😺'} ${cat.name}</span>
+        <span class="rank-val">${cat.checkin_count||0} 次打卡</span>
+      </div>`).join('') || '<div class="empty-tip">暂无数据</div>';
+  }
+
+  function applyFilter() {
+    const kw     = document.getElementById('searchInput').value.toLowerCase();
+    const gender = document.getElementById('filterGender').value;
+    const health = document.getElementById('filterHealth').value;
+    let cats = DB.Cat.getAll();
+    if (kw)     cats = cats.filter(c=>c.name.includes(kw)||(c.color||'').includes(kw)||(c.personality_tags||[]).some(t=>t.includes(kw)));
+    if (gender) cats = cats.filter(c=>c.gender===gender);
+    if (health) cats = cats.filter(c=>c.health_status===health);
+    renderCats(cats);
+  }
+
+  ['searchInput','filterGender','filterHealth'].forEach(id=>document.getElementById(id).addEventListener(id==='searchInput'?'input':'change',applyFilter));
+
+  document.getElementById('btnAddCat').addEventListener('click', () => {
+    document.getElementById('addCatModal').style.display = 'flex';
+  });
+
+  // 图片预览
+  document.getElementById('ac-photo').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      document.getElementById('ac-photo-img').src = ev.target.result;
+      document.getElementById('ac-photo-preview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // 保存新猫咪（含头像）
+  document.getElementById('btnSaveNewCat').addEventListener('click', () => {
+    const name = document.getElementById('ac-name').value.trim();
+    const errEl = document.getElementById('ac-err');
+    const errTx = document.getElementById('ac-err-text');
+    errEl.style.display = 'none';
+    if (!name) { errTx.textContent = '请填写猫咪名字'; errEl.style.display = 'flex'; return; }
+    const lng = parseFloat(document.getElementById('ac-lng').value) || 0;
+    const lat = parseFloat(document.getElementById('ac-lat').value) || 0;
+    if (!lng || !lat) { errTx.textContent = '请填写经纬度坐标'; errEl.style.display = 'flex'; return; }
+
+    // 读取图片（如果有）
+    const photoFile = document.getElementById('ac-photo').files[0];
+    const saveAndClose = (avatarData) => {
+      DB.Cat.create({
+        name,
+        gender: document.getElementById('ac-gender').value,
+        color: document.getElementById('ac-color').value.trim(),
+        health_status: document.getElementById('ac-health').value,
+        neutered: document.getElementById('ac-neutered').value === 'true',
+        personality_tags: document.getElementById('ac-tags').value.split(',').map(t => t.trim()).filter(Boolean),
+        location: { lng, lat, address: document.getElementById('ac-addr').value.trim() },
+        description: document.getElementById('ac-desc').value.trim(),
+        avatar: avatarData
+      });
+      document.getElementById('addCatModal').style.display = 'none';
+      showToast(`${name} 已添加到档案库！`, 'success');
+      renderCats(DB.Cat.getAll());
+      renderRank();
+      // 清空表单
+      ['ac-name','ac-color','ac-addr','ac-desc','ac-tags','ac-lng','ac-lat'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('ac-photo').value = '';
+      document.getElementById('ac-photo-preview').style.display = 'none';
+    };
+
+    if (photoFile) {
+      const reader = new FileReader();
+      reader.onload = ev => saveAndClose(ev.target.result); // base64
+      reader.readAsDataURL(photoFile);
+    } else {
+      saveAndClose('');
+    }
+  });
+
+  renderCats(DB.Cat.getAll());
+  renderRank();
+</script>
+</body>
+</html>

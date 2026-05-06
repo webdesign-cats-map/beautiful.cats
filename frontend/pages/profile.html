@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人中心 - 校园流浪猫</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<header class="navbar">
+  <div class="navbar-left">
+    <div class="logo"><div class="logo-icon">🐱</div>河海校园猫咪地图</div>
+    <nav class="nav-links">
+      <a href="../index.html">🗺️ 地图</a>
+      <a href="cats.html">🐾 猫咪档案</a>
+      <a href="checkin.html">📸 打卡上报</a>
+      <a href="stats.html">📊 数据看板</a>
+    </nav>
+  </div>
+  <div class="navbar-right" id="navUser"></div>
+</header>
+
+<div class="page-container" style="max-width:720px">
+  <div class="page-header"><h1>👤 个人中心</h1></div>
+  <div class="card" id="profileCard"></div>
+  <div class="card"><div class="card-header"><h3>❤️ 我的收藏</h3></div><div class="cat-grid" id="favCats" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))"></div></div>
+  <div class="card"><div class="card-header"><h3>📸 我的打卡</h3></div><div class="checkin-list" id="myCheckins"></div></div>
+  <div class="card"><div class="card-header"><h3>🏅 猫咪图鉴（${DB?.Cat?.getAll().length||0}只）</h3></div><div id="badgeGrid" style="display:flex;flex-wrap:wrap;gap:14px;padding:6px 0"></div></div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  Auth.updateNav();
+  if(!DB.Session.isLoggedIn()){window.location.replace('login.html');}
+  const user=DB.Session.getUser();
+
+  document.querySelector('.card-header h3:last-of-type').textContent=`🏅 猫咪图鉴（${DB.Cat.getAll().length}只）`;
+
+  document.getElementById('profileCard').innerHTML=`
+    <div style="display:flex;gap:18px;align-items:center">
+      <div style="width:68px;height:68px;border-radius:50%;background:linear-gradient(135deg,var(--accent-lt),var(--primary-lt));display:flex;align-items:center;justify-content:center;font-size:34px;flex-shrink:0;border:3px solid var(--primary-lt)">😊</div>
+      <div style="flex:1">
+        <h2 style="font-family:var(--font-title);font-size:22px;color:var(--primary-dk)">${user.nickname}</h2>
+        <div style="font-size:13px;color:var(--text-3)">@${user.username} · <span style="color:${user.role==='admin'?'var(--red)':'var(--blue)'};font-weight:700">${user.role==='admin'?'👑 管理员':'🐾 爱猫人士'}</span></div>
+        <div style="font-size:13px;color:var(--text-2);margin-top:5px">打卡 <strong style="color:var(--primary)">${user.checkin_count||0}</strong> 次 · 收藏 <strong style="color:var(--primary)">${(user.favorites||[]).length}</strong> 只</div>
+      </div>
+      ${user.role==='admin'?'<a href="admin.html" class="btn btn-warning btn-sm">⚙️ 管理后台</a>':''}
+      <button class="btn btn-sm btn-danger" onclick="Auth.logout()">退出</button>
+    </div>`;
+
+  const favs=(user.favorites||[]).map(id=>DB.Cat.getById(id)).filter(Boolean);
+  document.getElementById('favCats').innerHTML=favs.length?favs.map(cat=>{
+    const fs = catAvatarUrl(cat.avatar);
+    const fav_av = fs ? `<img src="${fs}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentElement.textContent='${cat.gender==='female'?'😸':'😺'}'">`:(cat.gender==='female'?'😸':'😺');
+    return `<div class="cat-card" onclick="window.location.href='cat_detail.html?id=${cat.id}'">
+      <div class="cat-card-avatar" style="height:80px;font-size:38px;overflow:hidden">${fav_av}</div>
+      <div class="cat-card-body"><div class="cat-card-name">${cat.name}</div><div class="cat-card-sub">${cat.location?.address||'位置未知'}</div></div>
+    </div>`;}).join(''):'<div class="empty-tip" style="grid-column:1/-1">还没有收藏的猫咪</div>';
+
+  const checkins=DB.Checkin.getByUser(user.id).slice(0,15);
+  document.getElementById('myCheckins').innerHTML=checkins.length?checkins.map(c=>`
+    <div class="checkin-item">
+      <div class="checkin-icon">${c.type==='feed'?'🍱':'📍'}</div>
+      <div class="checkin-info"><div class="checkin-title">${c.cat_name||'未知猫咪'} · ${c.type==='feed'?'投喂':'偶遇'}</div><div class="checkin-meta">${(c.created_at||'').substring(0,16)}</div></div>
+      <span class="checkin-status status-${c.status}">${c.status==='pending'?'⏳ 待审核':c.status==='approved'?'✅ 已通过':'❌ 已拒绝'}</span>
+    </div>`).join(''):'<div class="empty-tip">还没有打卡记录</div>';
+
+  const discovered=new Set(DB.Checkin.getByUser(user.id).filter(c=>c.status==='approved').map(c=>c.cat_id));
+  document.getElementById('badgeGrid').innerHTML=DB.Cat.getAll().map(cat=>{
+    const found=discovered.has(cat.id);
+    const photoSrc = catAvatarUrl(cat.avatar);
+    const photoInner = photoSrc
+      ? `<img src="${photoSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.parentElement.textContent='${cat.gender==='female'?'😸':'😺'}'">` 
+      : (cat.gender==='female'?'😸':'😺');
+    return `<div style="text-align:center;cursor:pointer;transition:transform .2s" onmouseenter="this.style.transform='scale(1.1)'" onmouseleave="this.style.transform=''" onclick="window.location.href='cat_detail.html?id=${cat.id}'" title="${cat.name}">
+      <div style="width:58px;height:58px;border-radius:50%;background:${found?'linear-gradient(135deg,var(--accent),var(--primary))':'var(--border)'};display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto;border:3px solid ${found?'var(--primary)':'transparent'};opacity:${found?1:.4};box-shadow:${found?'0 4px 12px rgba(201,123,58,.3)':'none'};overflow:hidden">${photoInner}</div>
+      <div style="font-size:11px;margin-top:4px;font-weight:700;color:var(--text)">${cat.name}</div>
+      <div style="font-size:10px;color:${found?'var(--primary)':'var(--text-3)'}">${found?'✅ 已发现':'🔒 未发现'}</div>
+    </div>`;
+  }).join('')||'<div class="empty-tip">暂无猫咪档案</div>';
+</script>
+</body>
+</html>

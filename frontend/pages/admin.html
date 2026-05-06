@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理后台 - 校园流浪猫</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<header class="navbar">
+  <div class="navbar-left">
+    <div class="logo"><div class="logo-icon">🐱</div>河海校园猫咪地图</div>
+    <nav class="nav-links">
+      <a href="../index.html">🗺️ 地图</a>
+      <a href="cats.html">🐾 猫咪档案</a>
+      <a href="admin.html" class="active">⚙️ 管理后台</a>
+    </nav>
+  </div>
+  <div class="navbar-right" id="navUser"></div>
+</header>
+
+<div class="page-container">
+  <div class="page-header"><h1>⚙️ 管理后台</h1></div>
+
+  <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid var(--border)">
+    <button class="tab-btn active" data-tab="cats"     onclick="switchTab('cats')">🐱 猫咪管理</button>
+    <button class="tab-btn"        data-tab="checkins" onclick="switchTab('checkins')">📸 打卡审核</button>
+    <button class="tab-btn"        data-tab="reports"  onclick="switchTab('reports')">📢 上报审核</button>
+    <button class="tab-btn"        data-tab="users"    onclick="switchTab('users')">👤 用户管理</button>
+  </div>
+  <style>
+    .tab-btn{padding:9px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:700;color:var(--text-3);border-bottom:3px solid transparent;margin-bottom:-2px;font-family:var(--font-body);transition:all .2s;}
+    .tab-btn.active{color:var(--primary);border-bottom-color:var(--primary);}
+    .tab-btn:hover{color:var(--primary);}
+  </style>
+
+  <div id="tab-cats" class="tab-content">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn btn-primary" onclick="showCatForm()">+ 新增猫咪</button>
+    </div>
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>名字</th><th>性别</th><th>毛色</th><th>健康</th><th>绝育</th><th>位置</th><th>打卡</th><th>操作</th></tr></thead>
+      <tbody id="catsTableBody"></tbody>
+    </table></div></div>
+  </div>
+
+  <div id="tab-checkins" class="tab-content hidden">
+    <div class="checkin-list" id="pendingCheckins"></div>
+  </div>
+
+  <div id="tab-reports" class="tab-content hidden">
+    <div class="checkin-list" id="pendingReports"></div>
+  </div>
+
+  <div id="tab-users" class="tab-content hidden">
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>用户名</th><th>昵称</th><th>角色</th><th>打卡数</th><th>注册时间</th><th>操作</th></tr></thead>
+      <tbody id="usersTableBody"></tbody>
+    </table></div></div>
+  </div>
+</div>
+
+<!-- 猫咪表单弹窗 -->
+<div class="modal-overlay" id="catFormModal" style="display:none">
+  <div class="modal" style="max-width:560px">
+    <button class="modal-close" onclick="document.getElementById('catFormModal').style.display='none'">✕</button>
+    <div class="modal-title" id="catFormTitle">🐱 新增猫咪</div>
+    <input type="hidden" id="editCatId">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group"><label>名字 *</label><input type="text" id="cf-name" class="form-input" placeholder="猫咪名字"></div>
+      <div class="form-group"><label>性别</label>
+        <select id="cf-gender" class="form-select"><option value="unknown">未知</option><option value="male">♂ 公</option><option value="female">♀ 母</option></select>
+      </div>
+      <div class="form-group"><label>毛色</label><input type="text" id="cf-color" class="form-input" placeholder="如：橙色虎斑"></div>
+      <div class="form-group"><label>健康状态</label>
+        <select id="cf-health" class="form-select"><option value="healthy">✅ 健康</option><option value="injured">🏥 需关注</option></select>
+      </div>
+      <div class="form-group"><label>绝育</label>
+        <select id="cf-neutered" class="form-select"><option value="false">❌ 未绝育</option><option value="true">✅ 已绝育</option></select>
+      </div>
+      <div class="form-group"><label>个性标签（逗号分隔）</label><input type="text" id="cf-tags" class="form-input" placeholder="亲人,爱吃"></div>
+    </div>
+    <div class="form-group"><label>📍 位置描述</label><input type="text" id="cf-addr" class="form-input"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="form-group"><label>经度</label><input type="number" id="cf-lng" class="form-input" placeholder="118.7567" step="0.00001"></div>
+      <div class="form-group"><label>纬度</label><input type="number" id="cf-lat" class="form-input" placeholder="31.9097" step="0.00001"></div>
+    </div>
+    <div class="form-group">
+      <label>🖼️ 头像照片（可选，重新上传将替换旧图）</label>
+      <input type="file" id="cf-photo" accept="image/*" class="form-input" style="padding:6px">
+      <div id="cf-photo-preview" style="margin-top:8px;display:none">
+        <img id="cf-photo-img" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid var(--primary-lt)">
+      </div>
+    </div>
+    <input type="hidden" id="cf-avatar-current">
+    <div class="form-group"><label>简介</label><textarea id="cf-desc" class="form-input" rows="2"></textarea></div>
+    <div class="form-actions">
+      <button class="btn btn-primary" id="btnSaveCat">🐾 保存</button>
+      <button class="btn btn-outline" onclick="document.getElementById('catFormModal').style.display='none'">取消</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  Auth.updateNav();
+  if (!DB.Session.isAdmin()) { showToast('需要管理员权限','error'); setTimeout(()=>window.location.replace('../index.html'),800); }
+
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('active'));
+    document.getElementById('tab-'+tab).classList.remove('hidden');
+    document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+    if(tab==='cats')     renderCats();
+    if(tab==='checkins') renderCheckins();
+    if(tab==='reports')  renderReports();
+    if(tab==='users')    renderUsers();
+  }
+
+  // ===== 猫咪管理 =====
+  function renderCats() {
+    document.getElementById('catsTableBody').innerHTML = DB.Cat.getAll().map(cat=>`
+      <tr>
+        <td><strong>${cat.name}</strong></td>
+        <td>${cat.gender==='male'?'♂ 公':cat.gender==='female'?'♀ 母':'?'}</td>
+        <td>${cat.color||'-'}</td>
+        <td><span class="tag ${cat.health_status==='healthy'?'tag-green':'tag-red'}" style="font-size:11px">${cat.health_status==='healthy'?'✅ 健康':'🏥 需关注'}</span></td>
+        <td>${cat.neutered?'✅':'❌'}</td>
+        <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cat.location?.address||'-'}</td>
+        <td><strong style="color:var(--primary)">${cat.checkin_count||0}</strong></td>
+        <td>
+          <button class="btn btn-sm btn-outline" onclick="editCat('${cat.id}')">✏️ 编辑</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteCat('${cat.id}','${cat.name}')">🗑️</button>
+        </td>
+      </tr>`).join('');
+  }
+
+  function showCatForm(id) {
+    document.getElementById('catFormTitle').textContent = id ? '✏️ 编辑猫咪' : '🐱 新增猫咪';
+    document.getElementById('editCatId').value = id || '';
+    const cat = id ? DB.Cat.getById(id) : null;
+    document.getElementById('cf-name').value     = cat?.name || '';
+    document.getElementById('cf-gender').value   = cat?.gender || 'unknown';
+    document.getElementById('cf-color').value    = cat?.color || '';
+    document.getElementById('cf-health').value   = cat?.health_status || 'healthy';
+    document.getElementById('cf-neutered').value = String(cat?.neutered || false);
+    document.getElementById('cf-tags').value     = (cat?.personality_tags || []).join(',');
+    document.getElementById('cf-addr').value     = cat?.location?.address || '';
+    document.getElementById('cf-lng').value      = cat?.location?.lng || '';
+    document.getElementById('cf-lat').value      = cat?.location?.lat || '';
+    document.getElementById('cf-desc').value     = cat?.description || '';
+    document.getElementById('cf-photo').value    = '';
+    document.getElementById('cf-avatar-current').value = cat?.avatar || '';
+    // 显示当前头像预览
+    const preview = document.getElementById('cf-photo-preview');
+    const previewImg = document.getElementById('cf-photo-img');
+    if (cat?.avatar) {
+      const src = cat.avatar.startsWith('data:') || cat.avatar.startsWith('http') ? cat.avatar : '../' + cat.avatar;
+      previewImg.src = src;
+      preview.style.display = 'block';
+    } else {
+      preview.style.display = 'none';
+    }
+    document.getElementById('catFormModal').style.display = 'flex';
+  }
+
+  function editCat(id) { showCatForm(id); }
+
+  // 图片预览
+  document.getElementById('cf-photo').addEventListener('change', e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      document.getElementById('cf-photo-img').src = ev.target.result;
+      document.getElementById('cf-photo-preview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById('btnSaveCat').addEventListener('click', () => {
+    const id   = document.getElementById('editCatId').value;
+    const name = document.getElementById('cf-name').value.trim();
+    if (!name) { showToast('请填写名字', 'error'); return; }
+    const baseData = {
+      name,
+      gender: document.getElementById('cf-gender').value,
+      color: document.getElementById('cf-color').value.trim(),
+      health_status: document.getElementById('cf-health').value,
+      neutered: document.getElementById('cf-neutered').value === 'true',
+      personality_tags: document.getElementById('cf-tags').value.split(',').map(t => t.trim()).filter(Boolean),
+      location: {
+        address: document.getElementById('cf-addr').value.trim(),
+        lng: parseFloat(document.getElementById('cf-lng').value) || 0,
+        lat: parseFloat(document.getElementById('cf-lat').value) || 0
+      },
+      description: document.getElementById('cf-desc').value.trim()
+    };
+    const photoFile = document.getElementById('cf-photo').files[0];
+    const doSave = (avatarData) => {
+      baseData.avatar = avatarData !== null ? avatarData : document.getElementById('cf-avatar-current').value;
+      if (id) DB.Cat.update(id, baseData); else DB.Cat.create(baseData);
+      document.getElementById('catFormModal').style.display = 'none';
+      renderCats();
+      showToast((id ? '更新' : '添加') + '成功 🐱', 'success');
+    };
+    if (photoFile) {
+      const reader = new FileReader();
+      reader.onload = ev => doSave(ev.target.result);
+      reader.readAsDataURL(photoFile);
+    } else {
+      doSave(null);
+    }
+  });
+
+  function deleteCat(id,name){ if(!confirm(`确认删除「${name}」？`)) return; DB.Cat.delete(id); renderCats(); showToast('已删除','success'); }
+
+  // ===== 打卡审核 =====
+  function renderCheckins() {
+    const pending = DB.Checkin.getPending();
+    const el = document.getElementById('pendingCheckins');
+    if (!pending.length){ el.innerHTML='<div class="empty-tip">🎉 暂无待审核打卡</div>'; return; }
+    el.innerHTML = pending.map(c=>`
+      <div class="checkin-item">
+        <div class="checkin-icon">${c.type==='feed'?'🍱':'📍'}</div>
+        <div class="checkin-info">
+          <div class="checkin-title">${c.cat_name||'未知猫咪'} · ${c.user_nickname||'匿名'} · ${c.type==='feed'?'投喂打卡':'偶遇打卡'}</div>
+          <div class="checkin-meta">📍 ${c.location?.address||''} (${(c.location?.lng||0).toFixed(4)}, ${(c.location?.lat||0).toFixed(4)}) · ${(c.created_at||'').substring(0,16)}</div>
+          ${c.note?`<div style="font-size:12px;margin-top:3px;color:var(--text-2)">${c.note}</div>`:''}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-sm btn-success" onclick="approveCheckin('${c.id}',true)">✅ 通过</button>
+          <button class="btn btn-sm btn-danger"  onclick="approveCheckin('${c.id}',false)">❌ 拒绝</button>
+        </div>
+      </div>`).join('');
+  }
+  function approveCheckin(id,ok){ DB.Checkin.approve(id,ok); renderCheckins(); showToast(ok?'已通过 ✅':'已拒绝',ok?'success':'error'); }
+
+  // ===== 上报审核 =====
+  function renderReports() {
+    const pending = DB.Report.getPending();
+    const el = document.getElementById('pendingReports');
+    if (!pending.length){ el.innerHTML='<div class="empty-tip">🎉 暂无待审核上报</div>'; return; }
+    el.innerHTML = pending.map(r=>`
+      <div class="checkin-item">
+        <div class="checkin-icon">📢</div>
+        <div class="checkin-info">
+          <div class="checkin-title">上报新猫咪${r.cat_name?' 「'+r.cat_name+'」':''} · ${r.user_nickname||'匿名'}</div>
+          <div class="checkin-meta">📍 (${(r.location?.lng||0).toFixed(4)}, ${(r.location?.lat||0).toFixed(4)}) · ${(r.created_at||'').substring(0,16)}</div>
+          ${r.description?`<div style="font-size:12px;margin-top:3px;color:var(--text-2)">${r.description}</div>`:''}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-sm btn-success" onclick="approveReport('${r.id}',true)">✅ 通过并建档</button>
+          <button class="btn btn-sm btn-danger"  onclick="approveReport('${r.id}',false)">❌ 拒绝</button>
+        </div>
+      </div>`).join('');
+  }
+  function approveReport(id,ok){ DB.Report.approve(id,ok); renderReports(); showToast(ok?'已通过，猫咪已自动建档 🐱':'已拒绝',ok?'success':'error'); }
+
+  // ===== 用户管理 =====
+  function renderUsers() {
+    document.getElementById('usersTableBody').innerHTML = DB.User.getAll().map(u=>`
+      <tr>
+        <td>${u.username}</td><td>${u.nickname}</td>
+        <td><span class="tag ${u.role==='admin'?'tag-red':'tag-blue'}">${u.role==='admin'?'👑 管理员':'👤 用户'}</span></td>
+        <td><strong style="color:var(--primary)">${u.checkin_count||0}</strong></td>
+        <td>${(u.created_at||'').substring(0,10)}</td>
+        <td>${u.role!=='admin'?`<button class="btn btn-sm btn-warning" onclick="promoteUser('${u.id}')">设为管理员</button>`:'<span class="text-muted">-</span>'}</td>
+      </tr>`).join('');
+  }
+  function promoteUser(id){ if(!confirm('确认设为管理员？')) return; DB.User.update(id,{role:'admin'}); renderUsers(); showToast('已设置','success'); }
+
+  renderCats();
+</script>
+</body>
+</html>

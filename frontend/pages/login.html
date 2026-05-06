@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 - 河海大学校园流浪猫</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="auth-page">
+  <!-- 左侧背景图 -->
+  <div class="auth-bg">
+    <div class="auth-bg-overlay"></div>
+    <div class="auth-bg-text">
+      <h1>🐾 爱护每一只喵</h1>
+      <p>河海大学江宁校区 · 流浪猫关爱行动</p>
+    </div>
+  </div>
+
+  <!-- 右侧登录面板 -->
+  <div class="auth-panel">
+    <div class="auth-logo">🐱</div>
+    <h2 class="auth-title">猫咪地图管理系统</h2>
+    <p class="auth-sub">🐾 用爱标记每一个温暖的生命</p>
+
+    <!-- 标签切换 -->
+    <div class="auth-tabs" style="width:100%">
+      <div class="auth-tab active" id="tabLogin"  onclick="switchTab('login')">登录</div>
+      <div class="auth-tab"        id="tabReg"    onclick="switchTab('register')">注册</div>
+    </div>
+
+    <!-- ===== 登录表单 ===== -->
+    <div id="loginForm" style="width:100%">
+      <div class="form-group">
+        <div class="input-icon-wrap">
+          <span class="input-icon">👤</span>
+          <input type="text" id="l-username" class="form-input" placeholder="请输入用户名" autocomplete="username">
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="input-icon-wrap">
+          <span class="input-icon">🔒</span>
+          <input type="password" id="l-password" class="form-input" placeholder="请输入密码" autocomplete="current-password">
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="captcha-row">
+          <div class="input-icon-wrap" style="flex:1">
+            <span class="input-icon">✅</span>
+            <input type="text" id="l-captcha" class="form-input" placeholder="验证码" maxlength="4">
+          </div>
+          <div class="captcha-box" id="captchaBox" onclick="refreshCaptcha()" title="点击刷新"></div>
+        </div>
+      </div>
+      <div id="l-err" class="err-msg" style="display:none">⚠️ <span id="l-err-text"></span></div>
+      <button class="auth-btn" id="btnLogin">登 录</button>
+      <div class="auth-footer" style="margin-top:12px;font-size:12px">
+        演示账号：<code>admin / admin123</code> 或 <code>demo / demo123</code>
+      </div>
+    </div>
+
+    <!-- ===== 注册表单 ===== -->
+    <div id="registerForm" style="width:100%;display:none">
+      <div class="form-group">
+        <div class="input-icon-wrap">
+          <span class="input-icon">👤</span>
+          <input type="text" id="r-username" class="form-input" placeholder="用户名（4-16位）" autocomplete="username">
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="input-icon-wrap">
+          <span class="input-icon">😊</span>
+          <input type="text" id="r-nickname" class="form-input" placeholder="昵称（可选）">
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="input-icon-wrap">
+          <span class="input-icon">🔒</span>
+          <input type="password" id="r-password" class="form-input" placeholder="密码（至少6位）" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="input-icon-wrap">
+          <span class="input-icon">🔒</span>
+          <input type="password" id="r-password2" class="form-input" placeholder="确认密码" autocomplete="new-password">
+        </div>
+      </div>
+      <div id="r-err" class="err-msg" style="display:none">⚠️ <span id="r-err-text"></span></div>
+      <button class="auth-btn" id="btnRegister">注 册</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script>
+  if (DB.Session.isLoggedIn()) window.location.replace('../index.html');
+
+  // ===== 验证码 =====
+  let captchaCode = '';
+  function refreshCaptcha() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    captchaCode = Array.from({length: 4}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+    const box = document.getElementById('captchaBox');
+    box.textContent = captchaCode;
+    // 随机颜色
+    const colors = ['#c97b3a','#7ab87a','#7aaed4','#e8956d','#a07040'];
+    box.style.color = colors[Math.floor(Math.random()*colors.length)];
+  }
+  refreshCaptcha();
+
+  // ===== 标签切换 =====
+  function switchTab(tab) {
+    document.getElementById('loginForm').style.display    = tab === 'login'    ? 'block' : 'none';
+    document.getElementById('registerForm').style.display = tab === 'register' ? 'block' : 'none';
+    document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+    document.getElementById('tabReg').classList.toggle('active',   tab === 'register');
+  }
+
+  // ===== 登录 =====
+  function doLogin() {
+    const username = document.getElementById('l-username').value.trim();
+    const password = document.getElementById('l-password').value;
+    const captcha  = document.getElementById('l-captcha').value.trim();
+    const errText  = document.getElementById('l-err-text');
+    const errEl    = document.getElementById('l-err');
+    errEl.style.display = 'none';
+
+    if (!username || !password) { errText.textContent = '请填写用户名和密码'; errEl.style.display = 'flex'; return; }
+    if (captcha.toLowerCase() !== captchaCode.toLowerCase()) {
+      errText.textContent = '验证码错误，请重试';
+      errEl.style.display = 'flex';
+      refreshCaptcha();
+      document.getElementById('l-captcha').value = '';
+      return;
+    }
+    const result = DB.User.login(username, password);
+    if (result.success) {
+      DB.Session.setUser(result.user);
+      showToast('登录成功 🎉', 'success');
+      const redirect = new URLSearchParams(location.search).get('redirect');
+      setTimeout(() => window.location.href = redirect || '../index.html', 500);
+    } else {
+      errText.textContent = result.msg;
+      errEl.style.display = 'flex';
+      refreshCaptcha();
+    }
+  }
+
+  // ===== 注册 =====
+  function doRegister() {
+    const username  = document.getElementById('r-username').value.trim();
+    const nickname  = document.getElementById('r-nickname').value.trim();
+    const password  = document.getElementById('r-password').value;
+    const password2 = document.getElementById('r-password2').value;
+    const errText   = document.getElementById('r-err-text');
+    const errEl     = document.getElementById('r-err');
+    errEl.style.display = 'none';
+
+    const showErr = msg => { errText.textContent = msg; errEl.style.display = 'flex'; };
+    if (!username)               return showErr('请填写用户名');
+    if (username.length < 4)     return showErr('用户名至少4个字符');
+    if (username.length > 16)    return showErr('用户名最多16个字符');
+    if (!password)               return showErr('请填写密码');
+    if (password.length < 6)     return showErr('密码至少6位');
+    if (password !== password2)  return showErr('两次密码不一致');
+
+    const result = DB.User.register({ username, password, nickname: nickname || username });
+    if (result.success) {
+      DB.Session.setUser(result.user);
+      showToast('注册成功，欢迎加入！🎉', 'success');
+      setTimeout(() => window.location.replace('../index.html'), 600);
+    } else {
+      showErr(result.msg);
+    }
+  }
+
+  document.getElementById('btnLogin').addEventListener('click', doLogin);
+  document.getElementById('btnRegister').addEventListener('click', doRegister);
+  document.getElementById('l-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  document.getElementById('r-password2').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
+</script>
+</body>
+</html>

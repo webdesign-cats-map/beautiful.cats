@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>打卡上报 - 校园流浪猫</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<header class="navbar">
+  <div class="navbar-left">
+    <div class="logo"><div class="logo-icon">🐱</div>河海校园猫咪地图</div>
+    <nav class="nav-links">
+      <a href="../index.html">🗺️ 地图</a>
+      <a href="cats.html">🐾 猫咪档案</a>
+      <a href="checkin.html" class="active">📸 打卡上报</a>
+      <a href="stats.html">📊 数据看板</a>
+    </nav>
+  </div>
+  <div class="navbar-right" id="navUser"></div>
+</header>
+
+<div class="page-container" style="max-width:640px">
+  <div class="page-header"><h1>📸 偶遇 · 投喂打卡</h1></div>
+  <div class="card">
+    <div class="form-group">
+      <label>打卡类型 <span style="color:var(--red)">*</span></label>
+      <div style="display:flex;gap:10px">
+        <label style="flex:1;padding:14px;border:2px solid var(--border);border-radius:var(--radius);cursor:pointer;text-align:center;transition:all .2s" id="typeEncounterLabel">
+          <input type="radio" name="type" value="encounter" checked style="display:none">
+          <div style="font-size:28px">📍</div>
+          <div style="font-size:13px;margin-top:4px;font-weight:700">偶遇打卡</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:2px">发现猫咪</div>
+        </label>
+        <label style="flex:1;padding:14px;border:2px solid var(--border);border-radius:var(--radius);cursor:pointer;text-align:center;transition:all .2s" id="typeFeedLabel">
+          <input type="radio" name="type" value="feed" style="display:none">
+          <div style="font-size:28px">🍱</div>
+          <div style="font-size:13px;margin-top:4px;font-weight:700">投喂打卡</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:2px">记录投喂</div>
+        </label>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>选择猫咪 <span style="color:var(--red)">*</span></label>
+      <select id="catSelect" class="form-select"><option value="">请选择猫咪...</option></select>
+    </div>
+    <div class="form-group">
+      <label>📍 位置</label>
+      <button class="btn btn-outline btn-sm" id="btnGetLocation" style="margin-bottom:8px">📡 GPS 一键定位</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <input type="number" id="inputLng" class="form-input" placeholder="经度 118.7567" step="0.00001">
+        <input type="number" id="inputLat" class="form-input" placeholder="纬度 31.9097" step="0.00001">
+      </div>
+      <input type="text" id="inputAddr" class="form-input mt-4" placeholder="位置描述（如：图书馆门口）">
+    </div>
+    <div class="form-group">
+      <label>照片（可选）</label>
+      <input type="file" id="photoInput" accept="image/*" class="form-input">
+      <div id="photoPreview" style="margin-top:8px"></div>
+    </div>
+    <div class="form-group">
+      <label>备注</label>
+      <textarea id="noteInput" class="form-input" rows="2" placeholder="猫咪今天的状态、行为..."></textarea>
+    </div>
+    <div style="padding:12px;background:var(--green-lt);border-radius:var(--radius);border:1.5px solid #b0d8b0;margin-bottom:14px;font-size:12px;color:#3a7a3a;line-height:1.7">
+      🌿 <strong>科学养猫提示：</strong>请投喂专用猫粮，避免葱蒜、葡萄、牛奶、巧克力等食物（对猫有毒）。发现受伤猫咪请联系 <strong>志愿者协会</strong> 或 <strong>校医院</strong>。
+    </div>
+    <button class="btn btn-primary btn-block" id="btnSubmit" style="padding:13px;font-size:15px;border-radius:var(--radius)">🐾 提交打卡</button>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>📋 我的打卡记录</h3></div>
+    <div id="myCheckins" class="checkin-list"></div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  Auth.updateNav();
+  if (!DB.Session.isLoggedIn()) window.location.replace('login.html');
+
+  DB.Cat.getAll().forEach(c=>{ const o=document.createElement('option'); o.value=c.id; o.textContent=`${c.name} — ${c.location?.address||'位置未知'}`; document.getElementById('catSelect').appendChild(o); });
+  const pre = new URLSearchParams(location.search).get('cat_id'); if(pre) document.getElementById('catSelect').value=pre;
+
+  // 类型选择高亮
+  function updateTypeStyle() {
+    const enc = document.querySelector('[name="type"][value="encounter"]').checked;
+    document.getElementById('typeEncounterLabel').style.borderColor = enc ? 'var(--primary)' : 'var(--border)';
+    document.getElementById('typeEncounterLabel').style.background  = enc ? 'var(--accent-lt)' : '';
+    document.getElementById('typeFeedLabel').style.borderColor = !enc ? 'var(--primary)' : 'var(--border)';
+    document.getElementById('typeFeedLabel').style.background  = !enc ? 'var(--accent-lt)' : '';
+  }
+  document.querySelectorAll('[name="type"]').forEach(r=>r.addEventListener('change',updateTypeStyle));
+  updateTypeStyle();
+
+  document.getElementById('photoInput').addEventListener('change',e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader(); r.onload=ev=>{ document.getElementById('photoPreview').innerHTML=`<img src="${ev.target.result}" style="max-width:100%;border-radius:10px;max-height:180px;object-fit:cover">`; }; r.readAsDataURL(f);
+  });
+
+  document.getElementById('btnGetLocation').addEventListener('click',()=>{
+    if(!navigator.geolocation){showToast('浏览器不支持定位','error');return;}
+    showToast('定位中...');
+    navigator.geolocation.getCurrentPosition(p=>{
+      document.getElementById('inputLng').value=p.coords.longitude.toFixed(6);
+      document.getElementById('inputLat').value=p.coords.latitude.toFixed(6);
+      showToast('定位成功 📍','success');
+    },()=>showToast('定位失败，请手动填坐标','error'));
+  });
+
+  document.getElementById('btnSubmit').addEventListener('click',()=>{
+    const user=DB.Session.getUser();
+    const catId=document.getElementById('catSelect').value;
+    const type=document.querySelector('[name="type"]:checked')?.value||'encounter';
+    const lng=parseFloat(document.getElementById('inputLng').value);
+    const lat=parseFloat(document.getElementById('inputLat').value);
+    const addr=document.getElementById('inputAddr').value.trim();
+    const note=document.getElementById('noteInput').value.trim();
+    if (!catId) { showToast('请选择猫咪','error'); return; }
+    if (!lng||!lat) { showToast('请填写坐标或使用GPS定位','error'); return; }
+    const cat=DB.Cat.getById(catId);
+    DB.Checkin.create({ cat_id:catId, cat_name:cat?.name, type, location:{lng,lat,address:addr}, note, user_id:user.id, user_nickname:user.nickname });
+    showToast('打卡成功！等待管理员审核 🎉','success');
+    document.getElementById('noteInput').value='';
+    document.getElementById('inputAddr').value='';
+    renderMyCheckins();
+  });
+
+  function renderMyCheckins() {
+    const user=DB.Session.getUser(); const el=document.getElementById('myCheckins');
+    if(!user){el.innerHTML='<div class="empty-tip">登录后查看</div>';return;}
+    const list=DB.Checkin.getByUser(user.id).slice(0,15);
+    if(!list.length){el.innerHTML='<div class="empty-tip">还没有打卡记录，快去探索吧！</div>';return;}
+    el.innerHTML=list.map(c=>`
+      <div class="checkin-item">
+        <div class="checkin-icon">${c.type==='feed'?'🍱':'📍'}</div>
+        <div class="checkin-info">
+          <div class="checkin-title">${c.cat_name||'未知猫咪'} · ${c.type==='feed'?'投喂打卡':'偶遇打卡'}</div>
+          <div class="checkin-meta">${(c.created_at||'').substring(0,16)} ${c.location?.address?'· 📍'+c.location.address:''}</div>
+        </div>
+        <span class="checkin-status status-${c.status}">${c.status==='pending'?'⏳ 待审核':c.status==='approved'?'✅ 已通过':'❌ 已拒绝'}</span>
+      </div>`).join('');
+  }
+
+  renderMyCheckins();
+</script>
+</body>
+</html>

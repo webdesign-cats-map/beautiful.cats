@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>猫咪详情 - 校园流浪猫</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<header class="navbar">
+  <div class="navbar-left">
+    <div class="logo"><div class="logo-icon">🐱</div>河海校园猫咪地图</div>
+    <nav class="nav-links">
+      <a href="../index.html">🗺️ 地图</a>
+      <a href="cats.html">🐾 猫咪档案</a>
+      <a href="checkin.html">📸 打卡上报</a>
+      <a href="stats.html">📊 数据看板</a>
+    </nav>
+  </div>
+  <div class="navbar-right" id="navUser"></div>
+</header>
+
+<div class="page-container" style="max-width:800px">
+  <div id="catInfoCard" class="card"></div>
+  <div class="card">
+    <div class="card-header"><h3>📸 打卡记录</h3><button class="btn btn-primary btn-sm" onclick="goCheckin()">去打卡</button></div>
+    <div id="checkinList" class="checkin-list"></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>📖 故事墙</h3></div>
+    <div id="commentList" class="comment-list"></div>
+    <div style="margin-top:16px" id="commentForm">
+      <textarea id="commentInput" class="form-input" rows="2" placeholder="分享你和它的故事 🐾"></textarea>
+      <div style="text-align:right;margin-top:8px"><button class="btn btn-primary btn-sm" id="btnComment">发布故事</button></div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/db.js"></script>
+<script src="../js/auth.js"></script>
+<script>
+  Auth.updateNav();
+  if(!DB.Session.isLoggedIn()) window.location.replace('login.html');
+  const catId=new URLSearchParams(location.search).get('id');
+  if(!catId) window.location.replace('cats.html');
+  const cat=DB.Cat.getById(catId);
+  if(!cat){document.getElementById('catInfoCard').innerHTML='<div class="empty-tip">猫咪不存在或已移除</div>';}
+
+  function render(){
+    const avatarSrc = catAvatarUrl(cat.avatar);
+    const avatarHtml = avatarSrc
+      ? `<img src="${avatarSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.parentElement.textContent='${cat.gender==='female'?'😸':'😺'}'">`
+      : (cat.gender==='female'?'😸':'😺');
+    document.getElementById('catInfoCard').innerHTML=`
+      <div style="display:flex;gap:20px;align-items:flex-start;margin-bottom:16px;padding-bottom:16px;border-bottom:2px dashed var(--border)">
+        <div style="width:90px;height:90px;border-radius:50%;background:linear-gradient(135deg,var(--accent-lt),var(--primary-lt));display:flex;align-items:center;justify-content:center;font-size:46px;flex-shrink:0;border:3px solid var(--primary-lt);overflow:hidden">${avatarHtml}</div>
+        <div style="flex:1">
+          <h2 style="font-family:var(--font-title);font-size:26px;color:var(--primary-dk);margin-bottom:8px">${cat.name}</h2>
+          <div class="tag-group">
+            <span class="tag ${cat.health_status==='healthy'?'tag-green':'tag-red'}">${cat.health_status==='healthy'?'✅ 健康':'🏥 需关注'}</span>
+            ${cat.neutered?'<span class="tag tag-blue">已绝育</span>':''}
+            ${(cat.personality_tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}
+          </div>
+          <p style="font-size:12px;color:var(--text-3);margin-top:8px">📍 ${cat.location?.address||'位置未知'}</p>
+        </div>
+      </div>
+      <div class="info-grid">
+        <div class="info-item"><label>性别</label><span>${cat.gender==='male'?'♂ 公':cat.gender==='female'?'♀ 母':'未知'}</span></div>
+        <div class="info-item"><label>毛色</label><span>${cat.color||'-'}</span></div>
+        <div class="info-item"><label>健康状态</label><span>${cat.health_status==='healthy'?'健康':'需关注'}</span></div>
+        <div class="info-item"><label>绝育状态</label><span>${cat.neutered?'✅ 已绝育':'❌ 未绝育'}</span></div>
+        <div class="info-item"><label>打卡次数</label><span style="color:var(--primary);font-weight:800;font-size:16px">${cat.checkin_count||0} 次</span></div>
+        <div class="info-item"><label>最近出没</label><span>${(cat.last_seen||'').substring(0,10)||'-'}</span></div>
+      </div>
+      <div class="info-desc" style="margin-top:10px"><label>猫咪简介</label><p>${cat.description||'暂无简介'}</p></div>
+      <div style="display:flex;gap:8px;margin-top:16px;padding-top:16px;border-top:2px dashed var(--border)">
+        <button class="btn btn-primary" onclick="goCheckin()">📸 打卡</button>
+        <button class="btn btn-outline" onclick="toggleFav()">❤️ 收藏</button>
+        <a href="../index.html" class="btn btn-outline">🗺️ 地图上查看</a>
+      </div>`;
+
+    // 打卡记录
+    const cks=DB.Checkin.getByCat(catId).filter(c=>c.status==='approved');
+    const clEl=document.getElementById('checkinList');
+    if(!cks.length){clEl.innerHTML='<div class="empty-tip">还没有打卡记录</div>';}
+    else clEl.innerHTML=cks.slice(0,10).map(c=>`
+      <div class="checkin-item">
+        <div class="checkin-icon">${c.type==='feed'?'🍱':'📍'}</div>
+        <div class="checkin-info">
+          <div class="checkin-title">${c.type==='feed'?'投喂打卡':'偶遇打卡'} · ${c.user_nickname||'匿名用户'}</div>
+          <div class="checkin-meta">${(c.created_at||'').substring(0,16)} ${c.location?.address?'· '+c.location.address:''}</div>
+          ${c.note?`<div style="font-size:12px;margin-top:3px;color:var(--text-2)">${c.note}</div>`:''}
+        </div>
+      </div>`).join('');
+
+    renderComments();
+  }
+
+  function renderComments(){
+    const comments=DB.Comment.getByCat(catId); const el=document.getElementById('commentList');
+    if(!comments.length){el.innerHTML='<div class="empty-tip">还没有故事，来分享第一个吧~</div>';return;}
+    el.innerHTML=comments.map(c=>`
+      <div class="comment-item">
+        <div class="comment-avatar">😊</div>
+        <div class="comment-bubble">
+          <div class="comment-user">${c.user_nickname}</div>
+          <div class="comment-content">${c.content}</div>
+          <div class="comment-time">${(c.created_at||'').substring(0,16)}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  function goCheckin(){
+    if(!DB.Session.isLoggedIn()){showToast('请先登录','error');return;}
+    window.location.href=`checkin.html?cat_id=${catId}`;
+  }
+  function toggleFav(){
+    const user=DB.Session.getUser(); if(!user){showToast('请先登录','error');return;}
+    showToast(DB.User.toggleFavorite(user.id,catId)?'已收藏 ❤️':'已取消收藏','success');
+  }
+
+  document.getElementById('btnComment').addEventListener('click',()=>{
+    const user=DB.Session.getUser(); if(!user){showToast('请先登录','error');return;}
+    const content=document.getElementById('commentInput').value.trim();
+    if(!content){showToast('请输入内容','error');return;}
+    DB.Comment.add(catId,{user_id:user.id,user_nickname:user.nickname,content});
+    document.getElementById('commentInput').value='';
+    renderComments(); showToast('发布成功！','success');
+  });
+
+  if(cat) render();
+</script>
+</body>
+</html>
